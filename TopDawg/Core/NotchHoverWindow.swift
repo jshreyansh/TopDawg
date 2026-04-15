@@ -43,6 +43,8 @@ final class NotchHoverWindow: NSObject, ObservableObject {
 
     @Published var isExpanded  = false
     @Published var activePage: PanelPage = .sessions
+    /// Non-nil while the chat panel is open for a specific session.
+    @Published var chatSession: UnifiedSession?
 
     let timerManager    = FocusTimerManager()
     let systemManager   = SystemMonitorManager()
@@ -576,18 +578,32 @@ struct NotchRootView: View {
     private var dropPanel: some View {
         ZStack {
             PanelShape(cornerR: NL.panelR).fill(Color(red: 0.08, green: 0.08, blue: 0.10))
-            PanelShape(cornerR: NL.panelR).stroke(approvalActive
-                ? Color.claudeCoralLight.opacity(0.35)
-                : Color.white.opacity(0.07), lineWidth: 1)
+            PanelShape(cornerR: NL.panelR).stroke(
+                approvalActive
+                    ? Color.claudeCoralLight.opacity(0.35)
+                    : controller.chatSession != nil
+                        ? Color.claudeTeal.opacity(0.20)
+                        : Color.white.opacity(0.07),
+                lineWidth: 1
+            )
 
             VStack(spacing: 0) {
                 if approvalActive {
+                    // Highest priority — safety-critical approval overlay
                     ApprovalOverlayView(pending: pendingApprovals) { id, decision in
                         handleApprovalDecision(id: id, decision: decision)
                     }
                     .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 12)
                     .frame(maxHeight: .infinity, alignment: .top)
+                } else if let session = controller.chatSession {
+                    // Second priority — conversation view
+                    ChatPanelView(session: session) {
+                        controller.chatSession = nil
+                    }
+                    .padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 4)
+                    .frame(maxHeight: .infinity, alignment: .top)
                 } else {
+                    // Normal tabbed pages
                     activePage
                         .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
                         .frame(maxHeight: .infinity, alignment: .top)
@@ -598,6 +614,7 @@ struct NotchRootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.22), value: approvalActive)
+        .animation(.easeInOut(duration: 0.22), value: controller.chatSession != nil)
         .animation(.easeInOut(duration: 0.18), value: controller.activePage)
         .clipped()
     }
@@ -632,7 +649,9 @@ struct NotchRootView: View {
     private static let tabBarPages: [PanelPage] = [.sessions, .stats, .analytics, .focus, .about]
 
     private var sessionsPage: some View {
-        SessionsPanelView(registry: sessionRegistry)
+        SessionsPanelView(registry: sessionRegistry) { session in
+            controller.chatSession = session
+        }
     }
 
     private var panelTabBar: some View {

@@ -5,6 +5,7 @@ import SwiftUI
 /// grouped by kind, with click-to-focus.
 struct SessionsPanelView: View {
     @ObservedObject var registry: SessionRegistry
+    var onOpenChat: ((UnifiedSession) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -65,7 +66,7 @@ struct SessionsPanelView: View {
                 .padding(.leading, 4)
 
             ForEach(sessions) { session in
-                SessionRowView(session: session)
+                SessionRowView(session: session, onOpenChat: onOpenChat)
             }
         }
     }

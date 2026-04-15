@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		45BB86F65511422DBB3C2ACF /* ChatPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CFE9C28F13F424FBCF666CE /* ChatPanelView.swift */; };
+		81C8CD03C06B45B3B12E78FA /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A5A2AAC52F44AB9A7AC7AB5 /* ChatMessage.swift */; };
+		2E07BBBC09CD4A46B414F88D /* ConversationParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E7AB494E6614530A8F5A235 /* ConversationParser.swift */; };
+		C6F3255FAFA640A2BBE1B470 /* ActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 022AB5CC16C441E4B416AB51 /* ActionButton.swift */; };
+		E2D3BAB281D9494ABB6C1133 /* ProcessingSpinner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 28BFDC28D3034C268AA4B680 /* ProcessingSpinner.swift */; };
 		0489C5EDE0A8C44B149244E0 /* DisplayManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D878004F817AFB33C2C353C0 /* DisplayManager.swift */; };
 		0DBBBA69D3FBC2C1E49B266F /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4AB42D649162BCDE6480816 /* SetupView.swift */; };
 		1523F008A2AF826193625A6D /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D685A38A6199158999F5968 /* UpdateChecker.swift */; };
@@ -46,6 +51,11 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		022AB5CC16C441E4B416AB51 /* ActionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionButton.swift; sourceTree = "<group>"; };
+		28BFDC28D3034C268AA4B680 /* ProcessingSpinner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessingSpinner.swift; sourceTree = "<group>"; };
+		1A5A2AAC52F44AB9A7AC7AB5 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
+		5E7AB494E6614530A8F5A235 /* ConversationParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationParser.swift; sourceTree = "<group>"; };
+		8CFE9C28F13F424FBCF666CE /* ChatPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatPanelView.swift; sourceTree = "<group>"; };
 		005DF3AE35FABA1EA271B51F /* ClaudeUsageManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeUsageManager.swift; sourceTree = "<group>"; };
 		120BDF4A7992FB9A0A2A708B /* MenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuView.swift; sourceTree = "<group>"; };
 		234009D59B3F19E7B82DF5D4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -131,6 +141,7 @@
 				D74C498C909F4C8334DF1FB0 /* TopDawg.entitlements */,
 				7B1DC9A52F22F00D5E197460 /* TopDawgApp.swift */,
 				6C746D37068D097473D53D2D /* Approvals */,
+				8E23A75697C74C8C82DC8EF6 /* Chat */,
 				1542D771D106CA21F8CB17FD /* Claude */,
 				DD552C5926ABB51B7BEC4ECD /* Core */,
 				879A7E750FBA83789A8C731A /* Sessions */,
@@ -231,10 +242,30 @@
 			path = Scanners;
 			sourceTree = "<group>";
 		};
+		8E23A75697C74C8C82DC8EF6 /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				1A5A2AAC52F44AB9A7AC7AB5 /* ChatMessage.swift */,
+				5E7AB494E6614530A8F5A235 /* ConversationParser.swift */,
+				B58187609EBE4B77BB6A69F7 /* Views */,
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
+		B58187609EBE4B77BB6A69F7 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				8CFE9C28F13F424FBCF666CE /* ChatPanelView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
 		E3DC8F32ECD79C16729A18C9 /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				022AB5CC16C441E4B416AB51 /* ActionButton.swift */,
 				120BDF4A7992FB9A0A2A708B /* MenuView.swift */,
+				28BFDC28D3034C268AA4B680 /* ProcessingSpinner.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -319,8 +350,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C6F3255FAFA640A2BBE1B470 /* ActionButton.swift in Sources */,
 				C42A850F00BEB39F71284C78 /* AppDelegate.swift in Sources */,
 				5B9637F90FA9C2F21BFB76D5 /* ApprovalOverlayView.swift in Sources */,
+				81C8CD03C06B45B3B12E78FA /* ChatMessage.swift in Sources */,
+				45BB86F65511422DBB3C2ACF /* ChatPanelView.swift in Sources */,
+				2E07BBBC09CD4A46B414F88D /* ConversationParser.swift in Sources */,
+				E2D3BAB281D9494ABB6C1133 /* ProcessingSpinner.swift in Sources */,
 				9A06BEB2DFFC3C467C7B9E3C /* ApprovalRequest.swift in Sources */,
 				F718275246C793ED7083C6D8 /* ApprovalRuleWriter.swift in Sources */,
 				48CB20FF705572C6EAF5D5FC /* ApprovalServer.swift in Sources */,

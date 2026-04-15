@@ -155,106 +155,30 @@ struct ApprovalOverlayView: View {
         .frame(height: 2)
     }
 
-    // MARK: - Actions
+    // MARK: - Actions (hover-invert ActionButtons with staggered entry)
 
     @ViewBuilder
     private func actions(for req: ApprovalRequest) -> some View {
         HStack(spacing: 6) {
-            // Deny — quiet, on the left
-            actionButton(
-                title: "Deny",
-                icon: "xmark",
-                kind: .quiet
-            ) {
+            // Deny — appears first
+            ActionButton("Deny", icon: "xmark", color: .white.opacity(0.55)) {
                 onResolve(req.id, .deny)
             }
+            .transition(.opacity.combined(with: .scale(scale: 0.85)))
 
             Spacer(minLength: 0)
 
-            // Allow once — primary
-            actionButton(
-                title: "Allow once",
-                icon: "checkmark",
-                kind: .primary
-            ) {
+            // Allow once — appears 0.08s later
+            ActionButton("Allow once", icon: "checkmark", color: .claudeTeal) {
                 onResolve(req.id, .allow)
             }
+            .transition(.opacity.combined(with: .scale(scale: 0.85)))
 
-            // Allow always — stronger, emphasised
-            actionButton(
-                title: "Always",
-                icon: "checkmark.seal.fill",
-                kind: .accent
-            ) {
+            // Always — appears 0.16s later
+            ActionButton("Always", icon: "checkmark.seal.fill", color: .claudeCoralLight) {
                 onResolve(req.id, .allowAlways)
             }
-        }
-    }
-
-    // MARK: - Button styling
-
-    private enum ButtonKind { case quiet, primary, accent }
-
-    @ViewBuilder
-    private func actionButton(
-        title: String,
-        icon: String,
-        kind: ButtonKind,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.system(size: 10, weight: .bold))
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-            }
-            .foregroundColor(foreground(for: kind))
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
-            .frame(minWidth: 72)
-            .background(background(for: kind))
-            .overlay(
-                RoundedRectangle(cornerRadius: 7)
-                    .stroke(stroke(for: kind), lineWidth: 1)
-            )
-            .cornerRadius(7)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func foreground(for kind: ButtonKind) -> Color {
-        switch kind {
-        case .quiet:   return .white.opacity(0.65)
-        case .primary: return .white
-        case .accent:  return .white
-        }
-    }
-
-    @ViewBuilder
-    private func background(for kind: ButtonKind) -> some View {
-        switch kind {
-        case .quiet:
-            Color.white.opacity(0.04)
-        case .primary:
-            LinearGradient(
-                colors: [.claudeTeal.opacity(0.85), .claudeTeal.opacity(0.65)],
-                startPoint: .top, endPoint: .bottom
-            )
-        case .accent:
-            LinearGradient(
-                colors: [.claudeCoralLight, .claudeCoral],
-                startPoint: .top, endPoint: .bottom
-            )
-        }
-    }
-
-    private func stroke(for kind: ButtonKind) -> Color {
-        switch kind {
-        case .quiet:   return .white.opacity(0.08)
-        case .primary: return .claudeTeal.opacity(0.4)
-        case .accent:  return .claudeCoralLight.opacity(0.4)
+            .transition(.opacity.combined(with: .scale(scale: 0.85)))
         }
     }
 
