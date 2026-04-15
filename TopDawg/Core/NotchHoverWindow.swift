@@ -1045,12 +1045,12 @@ struct NotchRootView: View {
                         aboutDivider
 
                         aboutActionRow(
-                            icon: "cup.and.saucer.fill",
-                            iconColor: Color(red: 1.0, green: 0.82, blue: 0.4),
-                            title: "Buy me a coffee",
-                            subtitle: "Support development via PayPal"
+                            icon: "at",
+                            iconColor: Color(red: 0.45, green: 0.78, blue: 1.0),
+                            title: "Follow on X",
+                            subtitle: "Talk with me on X/Twitter"
                         ) {
-                            if let url = URL(string: "https://www.paypal.com/paypalme/carlo080908") {
+                            if let url = URL(string: "https://x.com/shreya_jais101") {
                                 NSWorkspace.shared.open(url)
                             }
                         }

@@ -9,7 +9,7 @@ final class UpdateChecker: ObservableObject {
     // ── Configure these for your GitHub repo ──
     // Auto-updater is disabled in AppDelegate; these are placeholders. Update them
     // (and re-enable the launch check) only after you set up your own release pipeline.
-    static let repoOwner = "unset"
+    static let repoOwner = "jshreyansh"
     static let repoName  = "TopDawg"
 
     @Published var latestVersion: String?
