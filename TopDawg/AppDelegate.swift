@@ -7,14 +7,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let manager  = ClaudeUsageManager()
     let settings = ClaudeStatsSettings()
 
-    private var notchWindow:  NotchHoverWindow?
-    private var cancellables  = Set<AnyCancellable>()
+    private var notchWindow:   NotchHoverWindow?
+    private var approvalServer: ApprovalServer?
+    private var cancellables   = Set<AnyCancellable>()
 
     // MARK: - Launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupNotchWindow()
         setupObservers()
+        setupApprovalServer()
 
         let hasSetup = UserDefaults.standard.bool(forKey: "cn.setupComplete")
         if !hasSetup || !manager.isAuthenticated {
@@ -30,6 +32,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
         //     UpdateChecker.shared.checkOnLaunchIfNeeded()
         // }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        // Best-effort: deny any still-pending approvals so Claude Code doesn't hang.
+        notchWindow?.pendingApprovals.denyAll(reason: "TopDawg quit")
+        approvalServer?.stop()
+    }
+
+    // MARK: - Approval server + hooks
+
+    private func setupApprovalServer() {
+        guard let notchWindow else { return }
+        let server = ApprovalServer(pending: notchWindow.pendingApprovals)
+        self.approvalServer = server
+
+        Task.detached { [weak self] in
+            do {
+                try await server.start()
+                _ = try HookInstaller.install(urls: .init(
+                    permission: server.permissionURL,
+                    notification: server.notificationURL
+                ))
+                NSLog("[TopDawg] Approval server ready on port \(server.actualPort)")
+            } catch {
+                NSLog("[TopDawg] ApprovalServer setup failed: \(error)")
+                // Non-fatal: the notch still works without CLI approval interception.
+                _ = self // silence weak warning if unused
+            }
+        }
     }
 
     // MARK: - Notch Window

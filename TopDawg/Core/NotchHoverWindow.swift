@@ -48,6 +48,7 @@ final class NotchHoverWindow: NSObject, ObservableObject {
     let systemManager   = SystemMonitorManager()
     let editorState     = RichTextEditorState()
     let sessionRegistry = SessionRegistry()
+    let pendingApprovals = PendingApprovals()
 
     private var win:         NSWindow?
     private var hostingView: NSHostingView<AnyView>?
@@ -128,6 +129,19 @@ final class NotchHoverWindow: NSObject, ObservableObject {
             .sink { [weak self] m in self?.timerManager.longBreakDuration = TimeInterval(m * 60) }
             .store(in: &cancellables)
 
+        // Auto-pop the notch whenever a new approval request is enqueued.
+        pendingApprovals.$queue
+            .map(\.count)
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] count in
+                guard let self else { return }
+                if count > 0 && !self.isExpanded {
+                    self.expand()
+                }
+            }
+            .store(in: &cancellables)
+
         NotificationCenter.default.addObserver(
             self, selector: #selector(onScreenChange),
             name: NSApplication.didChangeScreenParametersNotification, object: nil)
@@ -181,6 +195,7 @@ final class NotchHoverWindow: NSObject, ObservableObject {
             manager: manager, settings: settings, controller: self,
             timerManager: timerManager, systemManager: systemManager,
             editorState: editorState, sessionRegistry: sessionRegistry,
+            pendingApprovals: pendingApprovals,
             notchH: notchH, notchGapW: notchGapW, panelH: NL.panelH
         ).ignoresSafeArea(.all))
 
@@ -453,6 +468,7 @@ struct NotchRootView: View {
     @ObservedObject var systemManager:   SystemMonitorManager
     @ObservedObject var editorState:     RichTextEditorState
     @ObservedObject var sessionRegistry: SessionRegistry
+    @ObservedObject var pendingApprovals: PendingApprovals
 
     @State private var feedbackText = ""
     @State private var feedbackSent = false
@@ -560,19 +576,42 @@ struct NotchRootView: View {
     private var dropPanel: some View {
         ZStack {
             PanelShape(cornerR: NL.panelR).fill(Color(red: 0.08, green: 0.08, blue: 0.10))
-            PanelShape(cornerR: NL.panelR).stroke(Color.white.opacity(0.07), lineWidth: 1)
+            PanelShape(cornerR: NL.panelR).stroke(approvalActive
+                ? Color.claudeCoralLight.opacity(0.35)
+                : Color.white.opacity(0.07), lineWidth: 1)
 
             VStack(spacing: 0) {
-                activePage
-                    .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
+                if approvalActive {
+                    ApprovalOverlayView(pending: pendingApprovals) { id, decision in
+                        handleApprovalDecision(id: id, decision: decision)
+                    }
+                    .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 12)
                     .frame(maxHeight: .infinity, alignment: .top)
+                } else {
+                    activePage
+                        .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
+                        .frame(maxHeight: .infinity, alignment: .top)
 
-                Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
-                panelTabBar
+                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+                    panelTabBar
+                }
             }
         }
+        .animation(.easeInOut(duration: 0.22), value: approvalActive)
         .animation(.easeInOut(duration: 0.18), value: controller.activePage)
         .clipped()
+    }
+
+    private var approvalActive: Bool { pendingApprovals.current != nil }
+
+    private func handleApprovalDecision(id: UUID, decision: ApprovalDecision) {
+        // If "Allow always", try to append a permission rule before resolving.
+        if decision == .allowAlways,
+           let req = pendingApprovals.current,
+           req.id == id {
+            ApprovalRuleWriter.appendAllowRule(for: req)
+        }
+        pendingApprovals.resolve(id, with: decision)
     }
 
     @ViewBuilder private var activePage: some View {
