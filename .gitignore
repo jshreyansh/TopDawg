@@ -1,0 +1,40 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserdata/
+*.xcworkspace/xcuserdata/
+xcuserdata/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Build products
+TopDawg.app/
+ClaudeNotch.app/
+*.app
+
+# SwiftPM
+.build/
+.swiftpm/
+
+# CocoaPods
+Pods/
+
+# Misc
+*.log
+*.tmp
+Thumbs.db
+*.zip
