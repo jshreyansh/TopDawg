@@ -60,11 +60,24 @@ struct CLIScanner {
                 ?? cwdBasename
                 ?? "Session \(file.sessionId.prefix(8))"
 
-            // Last activity = max(history timestamp, file mtime, startedAt)
+            // Last activity = max(history ts, session file mtime, transcript mtime, startedAt).
+            // The JSONL transcript is written continuously while Claude executes tools,
+            // so its mtime is the most reliable indicator of "actively processing".
             let historyTs = (titles[file.sessionId]?.timestamp).map { Date(timeIntervalSince1970: $0 / 1000) }
-            let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
-            let started = Date(timeIntervalSince1970: file.startedAt / 1000)
-            let lastActivity = [historyTs, mtime, started].compactMap { $0 }.max() ?? started
+            let mtime     = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+            let started   = Date(timeIntervalSince1970: file.startedAt / 1000)
+
+            let transcriptMtime: Date? = {
+                guard let cwd = file.cwd, !cwd.isEmpty else { return nil }
+                let encoded = cwd.replacingOccurrences(of: "/", with: "-")
+                let tURL = home
+                    .appendingPathComponent(".claude/projects")
+                    .appendingPathComponent(encoded)
+                    .appendingPathComponent("\(file.sessionId).jsonl")
+                return try? tURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+            }()
+
+            let lastActivity = [historyTs, mtime, started, transcriptMtime].compactMap { $0 }.max() ?? started
 
             out.append(UnifiedSession(
                 id: "\(kind.rawValue):\(file.sessionId)",
@@ -76,6 +89,7 @@ struct CLIScanner {
                 sessionId: file.sessionId,
                 lastActivity: lastActivity,
                 isRunning: alive,
+                transcriptMtime: transcriptMtime,
                 sourcePath: url.path
             ))
         }

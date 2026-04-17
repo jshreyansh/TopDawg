@@ -35,6 +35,11 @@ struct UnifiedSession: Identifiable, Hashable {
     let lastActivity: Date
     let isRunning: Bool             // whether the owning process is alive
 
+    /// mtime of the session's JSONL transcript. Written continuously while Claude
+    /// executes tools; goes stale the moment Claude finishes and waits for input.
+    /// nil for surfaces that don't have a known transcript path (Desktop, Cowork).
+    let transcriptMtime: Date?
+
     /// Backing JSON file path on disk, for "Reveal in Finder" later.
     let sourcePath: String?
 }
