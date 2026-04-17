@@ -48,6 +48,11 @@
 		DFFC45E61B234CE7A9D78A1E /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6098C116790D20E5EC91A86E /* HotKeyManager.swift */; };
 		F4AF683D6CCBA8B3BFF9C0B3 /* TopDawgApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B1DC9A52F22F00D5E197460 /* TopDawgApp.swift */; };
 		F718275246C793ED7083C6D8 /* ApprovalRuleWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7279321ADE5C3D843CE50338 /* ApprovalRuleWriter.swift */; };
+		AA11BC33011122334400AA08 /* NoteItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BC33011122334400AA03 /* NoteItem.swift */; };
+		AA11BC33011122334400AA09 /* NoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BC33011122334400AA04 /* NoteStore.swift */; };
+		AA11BC33011122334400AA0A /* LinkPreviewFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BC33011122334400AA05 /* LinkPreviewFetcher.swift */; };
+		AA11BC33011122334400AA0B /* NoteRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BC33011122334400AA06 /* NoteRowView.swift */; };
+		AA11BC33011122334400AA0C /* NotesTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA11BC33011122334400AA07 /* NotesTabView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -95,6 +100,11 @@
 		DFB3C89B149E461AA6E2E33E /* ProcessProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessProbe.swift; sourceTree = "<group>"; };
 		E4C0F1002948356D8B524D4C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F49F32F63423684F6ADE73C2 /* ApprovalServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalServer.swift; sourceTree = "<group>"; };
+		AA11BC33011122334400AA03 /* NoteItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteItem.swift; sourceTree = "<group>"; };
+		AA11BC33011122334400AA04 /* NoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteStore.swift; sourceTree = "<group>"; };
+		AA11BC33011122334400AA05 /* LinkPreviewFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkPreviewFetcher.swift; sourceTree = "<group>"; };
+		AA11BC33011122334400AA06 /* NoteRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoteRowView.swift; sourceTree = "<group>"; };
+		AA11BC33011122334400AA07 /* NotesTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotesTabView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -144,6 +154,7 @@
 				8E23A75697C74C8C82DC8EF6 /* Chat */,
 				1542D771D106CA21F8CB17FD /* Claude */,
 				DD552C5926ABB51B7BEC4ECD /* Core */,
+				AA11BC33011122334400AA01 /* Notes */,
 				879A7E750FBA83789A8C731A /* Sessions */,
 				EE2AB6955073F7778EBE3A11 /* Setup */,
 				E3DC8F32ECD79C16729A18C9 /* UI */,
@@ -279,6 +290,26 @@
 			path = Setup;
 			sourceTree = "<group>";
 		};
+		AA11BC33011122334400AA01 /* Notes */ = {
+			isa = PBXGroup;
+			children = (
+				AA11BC33011122334400AA05 /* LinkPreviewFetcher.swift */,
+				AA11BC33011122334400AA03 /* NoteItem.swift */,
+				AA11BC33011122334400AA04 /* NoteStore.swift */,
+				AA11BC33011122334400AA02 /* Views */,
+			);
+			path = Notes;
+			sourceTree = "<group>";
+		};
+		AA11BC33011122334400AA02 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AA11BC33011122334400AA06 /* NoteRowView.swift */,
+				AA11BC33011122334400AA07 /* NotesTabView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -389,6 +420,11 @@
 				1523F008A2AF826193625A6D /* UpdateChecker.swift in Sources */,
 				664477A46FA1AF322746CBD3 /* WebLoginView.swift in Sources */,
 				826542A760A0A20F61BC2D6A /* WindowFocuser.swift in Sources */,
+				AA11BC33011122334400AA08 /* NoteItem.swift in Sources */,
+				AA11BC33011122334400AA09 /* NoteStore.swift in Sources */,
+				AA11BC33011122334400AA0A /* LinkPreviewFetcher.swift in Sources */,
+				AA11BC33011122334400AA0B /* NoteRowView.swift in Sources */,
+				AA11BC33011122334400AA0C /* NotesTabView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

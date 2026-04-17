@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// A single session row inside `SessionsPanelView`.
-/// - Tap the row body → open the chat panel for this session.
-/// - Tap the terminal icon → focus the owning terminal/app (previous behavior).
 struct SessionRowView: View {
     let session: UnifiedSession
     var onOpenChat: ((UnifiedSession) -> Void)?
@@ -10,85 +7,94 @@ struct SessionRowView: View {
     @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            // ── Status dot ──────────────────────────────────────────────────
-            Circle()
-                .fill(session.isRunning ? Color.green : Color.gray.opacity(0.4))
-                .frame(width: 6, height: 6)
+        HStack(alignment: .center, spacing: 10) {
+            // Status dot — pulsing when running
+            statusDot
 
-            // ── Kind icon ───────────────────────────────────────────────────
-            Image(systemName: session.kind.icon)
-                .font(.system(size: 11))
-                .foregroundColor(.white.opacity(0.45))
-                .frame(width: 14)
-
-            // ── Title + subtitle ────────────────────────────────────────────
-            VStack(alignment: .leading, spacing: 1) {
-                Text(session.title)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.92))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
+            // Title + metadata
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
+                    Text(session.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.88))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
                     if let model = session.model {
                         Text(modelShort(model))
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.white.opacity(0.40))
-                    }
-                    if let cwd = session.cwd {
-                        Text(cwdShort(cwd))
-                            .font(.system(size: 9))
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
                             .foregroundColor(.white.opacity(0.28))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
                     }
+                }
+
+                if let cwd = session.cwd {
+                    Text(cwdShort(cwd))
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.22))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
             }
 
             Spacer(minLength: 4)
 
-            // ── Time + action icons ─────────────────────────────────────────
-            HStack(spacing: 6) {
-                Text(timeAgo(session.lastActivity))
-                    .font(.system(size: 9))
-                    .foregroundColor(.white.opacity(0.28))
-
-                // Chat button (visible on hover)
+            // Time + hover actions
+            HStack(spacing: 8) {
                 if isHovered {
                     Button(action: { onOpenChat?(session) }) {
-                        Image(systemName: "bubble.left.fill")
+                        Image(systemName: "bubble.left")
                             .font(.system(size: 10))
-                            .foregroundColor(.claudeTeal.opacity(0.8))
+                            .foregroundColor(.claudeTeal.opacity(0.75))
                     }
                     .buttonStyle(.plain)
                     .help("View conversation")
-                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    .transition(.opacity.combined(with: .scale(scale: 0.85)))
 
-                    // Focus terminal button
                     Button(action: { WindowFocuser.focus(session) }) {
-                        Image(systemName: "arrow.up.forward.app.fill")
+                        Image(systemName: "arrow.up.forward.app")
                             .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.35))
+                            .foregroundColor(.white.opacity(0.30))
                     }
                     .buttonStyle(.plain)
                     .help("Focus terminal")
-                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                } else {
+                    Text(timeAgo(session.lastActivity))
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.20))
                 }
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.leading, 8)
+        .padding(.trailing, 10)
+        .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color.white.opacity(isHovered ? 0.06 : 0.03))
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isHovered ? Color.white.opacity(0.06) : Color.clear)
         )
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .animation(.easeInOut(duration: 0.12), value: isHovered)
-        .onTapGesture {
-            // Primary tap opens chat view
-            onOpenChat?(session)
+        .onTapGesture { onOpenChat?(session) }
+        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: isHovered)
+    }
+
+    // MARK: - Status dot
+
+    @ViewBuilder
+    private var statusDot: some View {
+        if session.isRunning {
+            ZStack {
+                Circle()
+                    .fill(Color.claudeTeal.opacity(0.3))
+                    .frame(width: 10, height: 10)
+                Circle()
+                    .fill(Color.claudeTeal)
+                    .frame(width: 5, height: 5)
+            }
+        } else {
+            Circle()
+                .fill(Color.white.opacity(0.15))
+                .frame(width: 5, height: 5)
         }
     }
 

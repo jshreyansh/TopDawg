@@ -8,20 +8,24 @@ struct ConversationParser {
 
     // MARK: - Public API
 
-    /// Returns the URL of the JSONL transcript for `session`, or nil if not found.
-    static func transcriptURL(for session: UnifiedSession) -> URL? {
+    /// Returns the expected JSONL transcript URL for `session` without checking existence.
+    /// Returns nil only when there is no cwd to build a path from.
+    static func expectedTranscriptURL(for session: UnifiedSession) -> URL? {
         guard let cwd = session.cwd, !cwd.isEmpty else { return nil }
         let home = FileManager.default.homeDirectoryForCurrentUser
-
-        // Encode: "/Users/alice/Proj" → "-Users-alice-Proj"
+        // "/Users/alice/Proj" → "-Users-alice-Proj"
         let encoded = cwd.replacingOccurrences(of: "/", with: "-")
-
-        let url = home
+        return home
             .appendingPathComponent(".claude/projects")
             .appendingPathComponent(encoded)
             .appendingPathComponent("\(session.sessionId).jsonl")
+    }
 
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    /// Returns the URL of the JSONL transcript for `session`, or nil if not found on disk.
+    static func transcriptURL(for session: UnifiedSession) -> URL? {
+        guard let url = expectedTranscriptURL(for: session),
+              FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return url
     }
 
     /// Parse a JSONL transcript URL into an ordered array of chat messages.
@@ -135,6 +139,41 @@ struct ConversationParser {
                 return nil
             }
         }
+    }
+
+    // MARK: - Incremental parse
+
+    /// Reads only the bytes added since `fromOffset`, parses complete lines,
+    /// and returns new messages alongside the next safe byte offset.
+    /// Stops before any trailing partial line so incomplete JSON is never fed
+    /// to the decoder — important because Claude writes JSONL incrementally.
+    static func parseIncremental(url: URL, fromOffset offset: Int) -> (messages: [ChatMessage], nextOffset: Int) {
+        guard let fh = try? FileHandle(forReadingFrom: url) else { return ([], offset) }
+        defer { try? fh.close() }
+
+        fh.seek(toFileOffset: UInt64(offset))
+        let data = fh.readDataToEndOfFile()
+        guard !data.isEmpty else { return ([], offset) }
+
+        // Find the last newline — everything after it is a partial line in flight.
+        guard let lastNL = data.lastIndex(of: UInt8(ascii: "\n")) else { return ([], offset) }
+        let safe       = Data(data[data.startIndex...lastNL])
+        let nextOffset = offset + safe.count
+
+        guard let text = String(data: safe, encoding: .utf8) else { return ([], offset) }
+
+        var out: [ChatMessage] = []
+        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+            guard let lineData = String(line).data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any]
+            else { continue }
+            switch obj["type"] as? String {
+            case "user":      if let m = parseUser(obj)      { out.append(m) }
+            case "assistant": if let m = parseAssistant(obj) { out.append(m) }
+            default: break
+            }
+        }
+        return (out, nextOffset)
     }
 
     // MARK: - Timestamp

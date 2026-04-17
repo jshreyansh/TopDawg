@@ -127,7 +127,10 @@ final class ApprovalServer {
                 self.respond(conn: conn, status: 400, body: "bad headers"); return
             }
 
-            let lines = headerString.split(whereSeparator: { $0 == "\r" || $0 == "\n" }).map(String.init)
+            // Use components(separatedBy:) to reliably strip \r\n pairs.
+            let lines = headerString
+                .components(separatedBy: CharacterSet(charactersIn: "\r\n"))
+                .filter { !$0.isEmpty }
             guard let requestLine = lines.first else {
                 self.respond(conn: conn, status: 400, body: "no request line"); return
             }
@@ -147,20 +150,32 @@ final class ApprovalServer {
                 }
             }
 
-            let contentLength = Int(headers["content-length"] ?? "0") ?? 0
             let bodyStart = headerEnd.upperBound
-            let needed = bodyStart + contentLength
 
-            if buf.count < needed {
-                if isComplete {
-                    self.respond(conn: conn, status: 400, body: "body truncated"); return
+            // If the sender declares a Content-Length, honor it and wait for that many bytes.
+            // Otherwise (chunked / no header) drain the connection until it closes.
+            if let clStr = headers["content-length"], let contentLength = Int(clStr), contentLength > 0 {
+                let needed = bodyStart + contentLength
+                if buf.count < needed {
+                    if isComplete {
+                        self.respond(conn: conn, status: 400, body: "body truncated"); return
+                    }
+                    self.readFull(conn: conn, buffer: buf)
+                    return
                 }
-                self.readFull(conn: conn, buffer: buf)
-                return
+                let body = buf.subdata(in: bodyStart..<needed)
+                self.log.debug("route \(method, privacy: .public) \(target, privacy: .public) body=\(body.count, privacy: .public)B (content-length)")
+                self.route(conn: conn, method: method, target: target, body: body)
+            } else {
+                // No / zero Content-Length — accumulate until connection closes.
+                if isComplete {
+                    let body = buf.subdata(in: bodyStart..<buf.count)
+                    self.log.debug("route \(method, privacy: .public) \(target, privacy: .public) body=\(body.count, privacy: .public)B (drained)")
+                    self.route(conn: conn, method: method, target: target, body: body)
+                } else {
+                    self.readFull(conn: conn, buffer: buf)
+                }
             }
-
-            let body = buf.subdata(in: bodyStart..<needed)
-            self.route(conn: conn, method: method, target: target, body: body)
         }
     }
 
@@ -207,7 +222,9 @@ final class ApprovalServer {
     // MARK: - Permission
 
     private func handlePermissionRequest(conn: NWConnection, body: Data) {
+        log.info("PermissionRequest body=\(body.count, privacy: .public)B preview='\(String(data: body.prefix(120), encoding: .utf8) ?? "<binary>", privacy: .public)'")
         guard let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else {
+            log.error("PermissionRequest JSON parse failed for body='\(String(data: body, encoding: .utf8) ?? "<binary>", privacy: .public)'")
             respondHookDecision(conn: conn, behavior: "ask")  // fall back to terminal
             return
         }

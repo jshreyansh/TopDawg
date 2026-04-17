@@ -50,6 +50,23 @@ enum ProcessProbe {
         return nil
     }
 
+    /// Returns the name of the controlling terminal device (e.g. "ttys001") for a PID,
+    /// or nil if the process has no controlling terminal.
+    static func controllingTTY(of pid: Int32) -> String? {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        let result = mib.withUnsafeMutableBufferPointer { buf -> Int32 in
+            sysctl(buf.baseAddress, u_int(buf.count), &info, &size, nil, 0)
+        }
+        guard result == 0, size > 0 else { return nil }
+        let tdev = info.kp_eproc.e_tdev
+        // Real device numbers are positive; 0 and -1 (NODEV) mean no controlling terminal
+        guard tdev > 0 else { return nil }
+        guard let namePtr = devname(tdev, S_IFCHR) else { return nil }
+        return String(cString: namePtr)
+    }
+
     /// Returns the executable name (last path component of argv[0]) for a PID.
     static func executableName(of pid: Int32) -> String? {
         var path = [CChar](repeating: 0, count: kProcPidPathInfoMaxSize)

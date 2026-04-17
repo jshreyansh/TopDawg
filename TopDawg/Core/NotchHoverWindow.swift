@@ -27,7 +27,7 @@ enum PanelPage: String, CaseIterable, Hashable {
 private enum NL {
     static let panelH:  CGFloat = 290
     static let cornerR: CGFloat = 10
-    static let panelR:  CGFloat = 14
+    static let panelR:  CGFloat = 18
 }
 
 // MARK: - Window subclass (borderless windows can't become key by default)
@@ -42,7 +42,7 @@ private final class NotchWindow: NSWindow {
 final class NotchHoverWindow: NSObject, ObservableObject {
 
     @Published var isExpanded  = false
-    @Published var activePage: PanelPage = .sessions
+    @Published var activePage: PanelPage = .notes
     /// Non-nil while the chat panel is open for a specific session.
     @Published var chatSession: UnifiedSession?
 
@@ -51,20 +51,23 @@ final class NotchHoverWindow: NSObject, ObservableObject {
     let editorState     = RichTextEditorState()
     let sessionRegistry = SessionRegistry()
     let pendingApprovals = PendingApprovals()
+    let noteStore       = NoteStore()
 
-    private var win:         NSWindow?
-    private var hostingView: NSHostingView<AnyView>?
-    private var screen:      NSScreen
-    private var manager:     ClaudeUsageManager
-    private var settings:    ClaudeStatsSettings
-    private var mouseMonitor: Any?
-    private var hotKey:      HotKeyManager?
+    private var win:            NSWindow?
+    private var hostingView:    NSHostingView<AnyView>?
+    private var screen:         NSScreen
+    private var manager:        ClaudeUsageManager
+    private var settings:       ClaudeStatsSettings
+    private var mouseMonitor:   Any?
+    private var hotKey:         HotKeyManager?
+    private var noteDragDelegate: NoteDropOverlayView?
     private var cancellables = Set<AnyCancellable>()
 
     // Notch geometry
     private var notchH:    CGFloat = 37
     private var notchGapW: CGFloat = 162
     private var notchLeft: CGFloat = 0
+    private var hasNotch:  Bool    = false
 
     private var wingW: CGFloat { settings.sizePreset.wingWidth }
     private var barW:  CGFloat { wingW + notchGapW + wingW }
@@ -167,10 +170,12 @@ final class NotchHoverWindow: NSObject, ObservableObject {
            screen.safeAreaInsets.top > 0,
            let left  = screen.auxiliaryTopLeftArea,
            let right = screen.auxiliaryTopRightArea {
+            hasNotch  = true
             notchH    = screen.safeAreaInsets.top
             notchGapW = screen.frame.width - left.width - right.width
             notchLeft = screen.frame.origin.x + left.width
         } else {
+            hasNotch  = false
             notchH    = screen.frame.maxY - screen.visibleFrame.maxY
             notchGapW = 150
             notchLeft = screen.frame.origin.x + screen.frame.width / 2 - notchGapW / 2
@@ -190,6 +195,20 @@ final class NotchHoverWindow: NSObject, ObservableObject {
         w.ignoresMouseEvents = true
         self.win = w
         loadContent()
+        setupNoteDropDestination()
+    }
+
+    private func setupNoteDropDestination() {
+        guard let contentView = win?.contentView else { return }
+        let overlay = NoteDropOverlayView(frame: contentView.bounds)
+        overlay.autoresizingMask = [.width, .height]
+        overlay.noteStore  = noteStore
+        overlay.expandNotch = { [weak self] in
+            self?.win?.ignoresMouseEvents = false
+            self?.expand()
+        }
+        contentView.addSubview(overlay, positioned: .above, relativeTo: nil)
+        noteDragDelegate = overlay
     }
 
     private func loadContent() {
@@ -197,8 +216,9 @@ final class NotchHoverWindow: NSObject, ObservableObject {
             manager: manager, settings: settings, controller: self,
             timerManager: timerManager, systemManager: systemManager,
             editorState: editorState, sessionRegistry: sessionRegistry,
-            pendingApprovals: pendingApprovals,
-            notchH: notchH, notchGapW: notchGapW, panelH: NL.panelH
+            pendingApprovals: pendingApprovals, noteStore: noteStore,
+            notchH: notchH, notchGapW: notchGapW, panelH: NL.panelH,
+            hasNotch: hasNotch
         ).ignoresSafeArea(.all))
 
         if let hv = hostingView {
@@ -246,8 +266,10 @@ final class NotchHoverWindow: NSObject, ObservableObject {
 
     func collapse() {
         guard isExpanded else { return }
+        // Keep the notch open while the user needs to act on an approval.
+        guard pendingApprovals.current == nil else { return }
         isExpanded  = false
-        activePage  = .stats
+        activePage  = .notes
         win?.ignoresMouseEvents = true
         systemManager.stop()
         NSAnimationContext.runAnimationGroup { ctx in
@@ -471,6 +493,7 @@ struct NotchRootView: View {
     @ObservedObject var editorState:     RichTextEditorState
     @ObservedObject var sessionRegistry: SessionRegistry
     @ObservedObject var pendingApprovals: PendingApprovals
+    @ObservedObject var noteStore:       NoteStore
 
     @State private var feedbackText = ""
     @State private var feedbackSent = false
@@ -478,6 +501,7 @@ struct NotchRootView: View {
     let notchH:    CGFloat
     let notchGapW: CGFloat
     let panelH:    CGFloat
+    let hasNotch:  Bool
 
     private var wingW:  CGFloat { settings.sizePreset.wingWidth }
     private var totalW: CGFloat { wingW + notchGapW + wingW }
@@ -488,36 +512,78 @@ struct NotchRootView: View {
             notchBar.frame(width: totalW, height: notchH)
             if controller.isExpanded {
                 dropPanel.frame(width: totalW, height: panelH)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.97, anchor: .top)),
+                        removal:   .opacity
+                    ))
             }
         }
         .frame(width: totalW, alignment: .top)
+        // Fill concave wing-corner gaps so bar + panel read as one shape
+        .background(controller.isExpanded ? Color.black : Color.clear)
+        // Clip the whole container to round only the bottom corners
+        .clipShape(PanelShape(cornerR: controller.isExpanded ? NL.panelR : 0))
+        // Depth shadow
+        .shadow(color: controller.isExpanded ? .black.opacity(0.60) : .clear, radius: 14, y: 6)
+        // Critically-damped spring — no bounce/overshoot on open or close
+        .animation(.spring(response: 0.26, dampingFraction: 1.0), value: controller.isExpanded)
     }
 
     // MARK: Collapsed bar
 
+    private var isAgentRunning: Bool {
+        sessionRegistry.activelyProcessingCount > 0 && !controller.isExpanded
+    }
+
     private var notchBar: some View {
         HStack(spacing: 0) {
+            // Left wing — spinner when running, daily % otherwise
             ZStack {
                 LeftWingShape(cornerR: NL.cornerR).fill(Color.black)
                 leftChip.padding(.trailing, 8).frame(maxWidth: .infinity, alignment: .trailing)
             }
             .frame(width: wingW, height: notchH)
+            .animation(.easeInOut(duration: 0.22), value: isAgentRunning)
 
-            Color.black.frame(width: notchGapW, height: notchH)
+            // Center pill — approval / session waveform
+            ZStack {
+                Color.black
+                if !controller.isExpanded {
+                    if pendingApprovals.current != nil {
+                        NotchApprovalPill()
+                            .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                    } else if hasNotch && sessionRegistry.activelyProcessingCount > 0 {
+                        NotchSessionPill()
+                            .transition(.opacity.combined(with: .scale(scale: 0.85)))
+                    }
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: pendingApprovals.current != nil)
+            .animation(.easeInOut(duration: 0.25), value: sessionRegistry.activelyProcessingCount > 0)
+            .frame(width: notchGapW, height: notchH)
 
+            // Right wing — session count badge when running, weekly % otherwise
             ZStack {
                 RightWingShape(cornerR: NL.cornerR).fill(Color.black)
                 rightChip.padding(.leading, 8).frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(width: wingW, height: notchH)
+            .animation(.easeInOut(duration: 0.22), value: isAgentRunning)
         }
     }
 
     @ViewBuilder private var leftChip: some View {
         if manager.isAuthenticated {
-            PulsingChip(active: manager.usageData.sessionPercentage >= 80) {
-                barChip(pct: manager.usageData.sessionPercentage,
-                        pacing: manager.usageData.sessionPacing)
+            if isAgentRunning {
+                // claude-island style: cycling symbol spinner in coral
+                ProcessingSpinner(size: fs + 3, color: .claudeCoralLight)
+                    .transition(.opacity.combined(with: .scale(scale: 0.75)))
+            } else {
+                PulsingChip(active: manager.usageData.sessionPercentage >= 80) {
+                    barChip(pct: manager.usageData.sessionPercentage,
+                            pacing: manager.usageData.sessionPacing)
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.75)))
             }
         } else {
             Text("Setup")
@@ -528,15 +594,22 @@ struct NotchRootView: View {
 
     @ViewBuilder private var rightChip: some View {
         if manager.isAuthenticated {
-            PulsingChip(active: timerManager.isRunning
-                            ? timerManager.remaining < 120
-                            : manager.usageData.weeklyPercentage >= 80) {
-                if timerManager.isRunning {
-                    timerWingChip
-                } else {
-                    barChip(pct: manager.usageData.weeklyPercentage,
-                            pacing: manager.usageData.weeklyPacing)
+            if isAgentRunning {
+                // Pulsing teal dot + running count
+                RunningSessionBadge(count: sessionRegistry.runningCount, fontSize: fs)
+                    .transition(.opacity.combined(with: .scale(scale: 0.75)))
+            } else {
+                PulsingChip(active: timerManager.isRunning
+                                ? timerManager.remaining < 120
+                                : manager.usageData.weeklyPercentage >= 80) {
+                    if timerManager.isRunning {
+                        timerWingChip
+                    } else {
+                        barChip(pct: manager.usageData.weeklyPercentage,
+                                pacing: manager.usageData.weeklyPacing)
+                    }
                 }
+                .transition(.opacity.combined(with: .scale(scale: 0.75)))
             }
         }
     }
@@ -577,15 +650,8 @@ struct NotchRootView: View {
 
     private var dropPanel: some View {
         ZStack {
-            PanelShape(cornerR: NL.panelR).fill(Color(red: 0.08, green: 0.08, blue: 0.10))
-            PanelShape(cornerR: NL.panelR).stroke(
-                approvalActive
-                    ? Color.claudeCoralLight.opacity(0.35)
-                    : controller.chatSession != nil
-                        ? Color.claudeTeal.opacity(0.20)
-                        : Color.white.opacity(0.07),
-                lineWidth: 1
-            )
+            // Black fill — the outer VStack clip handles the corner rounding
+            Color.black
 
             VStack(spacing: 0) {
                 if approvalActive {
@@ -605,18 +671,29 @@ struct NotchRootView: View {
                 } else {
                     // Normal tabbed pages
                     activePage
-                        .padding(.horizontal, 16).padding(.top, 12).padding(.bottom, 4)
+                        .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 2)
                         .frame(maxHeight: .infinity, alignment: .top)
 
-                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+                    Rectangle().fill(Color.white.opacity(0.05)).frame(height: 1)
                     panelTabBar
                 }
             }
         }
-        .animation(.easeInOut(duration: 0.22), value: approvalActive)
-        .animation(.easeInOut(duration: 0.22), value: controller.chatSession != nil)
-        .animation(.easeInOut(duration: 0.18), value: controller.activePage)
-        .clipped()
+        // Border overlay rendered after the clip so corners look clean
+        .overlay(
+            Group {
+                if approvalActive {
+                    PanelShape(cornerR: NL.panelR)
+                        .stroke(Color.claudeCoral.opacity(0.30), lineWidth: 1)
+                } else if controller.chatSession != nil {
+                    PanelShape(cornerR: NL.panelR)
+                        .stroke(Color.claudeTeal.opacity(0.15), lineWidth: 1)
+                }
+            }
+        )
+        .animation(.spring(response: 0.28, dampingFraction: 1.0), value: approvalActive)
+        .animation(.spring(response: 0.28, dampingFraction: 1.0), value: controller.chatSession != nil)
+        .animation(.spring(response: 0.25, dampingFraction: 1.0), value: controller.activePage)
     }
 
     private var approvalActive: Bool { pendingApprovals.current != nil }
@@ -629,6 +706,13 @@ struct NotchRootView: View {
             ApprovalRuleWriter.appendAllowRule(for: req)
         }
         pendingApprovals.resolve(id, with: decision)
+        // Auto-collapse once the queue drains. Short delay lets the
+        // removal animation finish before the panel slides away.
+        if pendingApprovals.current == nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
+                controller.collapse()
+            }
+        }
     }
 
     @ViewBuilder private var activePage: some View {
@@ -644,9 +728,8 @@ struct NotchRootView: View {
         }
     }
 
-    // v1: Sessions is primary; System Monitor + Notes hidden from tab bar
-    // (enum cases retained so any deep-link / state restoration still compiles).
-    private static let tabBarPages: [PanelPage] = [.sessions, .stats, .analytics, .focus, .about]
+    // Notes is default; System Monitor hidden from tab bar.
+    private static let tabBarPages: [PanelPage] = [.notes, .sessions, .stats, .analytics, .focus, .about]
 
     private var sessionsPage: some View {
         SessionsPanelView(registry: sessionRegistry) { session in
@@ -659,26 +742,38 @@ struct NotchRootView: View {
             ForEach(Self.tabBarPages, id: \.self) { page in
                 tabBarIcon(page)
             }
-            Rectangle().fill(Color.white.opacity(0.10)).frame(width: 1, height: 14)
-                .padding(.horizontal, 2)
+            Rectangle().fill(Color.white.opacity(0.08)).frame(width: 1, height: 12)
+                .padding(.horizontal, 3)
             tabBarIcon(.settings)
         }
-        .padding(.horizontal, NL.panelR)
-        .padding(.bottom, 4)
+        .padding(.horizontal, 10)
+        .padding(.top, 4)
+        .padding(.bottom, 6)
     }
 
     private func tabBarIcon(_ page: PanelPage) -> some View {
-        Button(action: { controller.activePage = page }) {
-            Image(systemName: page.icon)
-                .font(.system(size: 10))
-                .frame(height: 28)
-                .frame(maxWidth: .infinity)
-                .foregroundColor(controller.activePage == page
-                    ? .claudeCoral
-                    : .white.opacity(0.28))
-                .contentShape(Rectangle())
+        let active = controller.activePage == page
+        return Button(action: {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                controller.activePage = page
+            }
+        }) {
+            VStack(spacing: 2) {
+                Image(systemName: page.icon)
+                    .font(.system(size: active ? 11 : 10.5,
+                                  weight: active ? .semibold : .regular))
+                    .foregroundColor(active ? .claudeCoral : .white.opacity(0.22))
+                    .frame(height: 20)
+                // Active indicator dot
+                Circle()
+                    .fill(active ? Color.claudeCoral : Color.clear)
+                    .frame(width: 3, height: 3)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .animation(.spring(response: 0.25, dampingFraction: 0.8), value: active)
     }
 
     // MARK: Stats page
@@ -686,26 +781,37 @@ struct NotchRootView: View {
     private var statsPage: some View {
         VStack(spacing: 7) {
             // Header
-            HStack {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(Color.claudeCoral)
+                    .frame(width: 6, height: 6)
+                Text("usage")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.85))
                 if let plan = manager.usageData.planDisplayName { planBadge(plan) }
                 Spacer()
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     if manager.isLoading {
-                        ProgressView().scaleEffect(0.5).frame(width: 10)
+                        ProgressView().scaleEffect(0.45).frame(width: 10, height: 10)
                     } else if let t = manager.usageData.lastUpdated {
                         (Text(t, style: .relative) + Text(" ago"))
-                            .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.28))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(.white.opacity(0.22))
                     }
                     Button(action: { manager.refresh() }) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(0.35))
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 5)
+                                .fill(Color.white.opacity(0.06))
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 8.5, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.4))
+                        }
+                        .frame(width: 20, height: 18)
                     }.buttonStyle(.plain)
                 }
             }
 
-            thinDivider
+            Rectangle().fill(Color.white.opacity(0.05)).frame(height: 1)
 
             // Insight line — burn rate or risk warning
             if let insight = sessionInsight {
@@ -1011,6 +1117,21 @@ struct NotchRootView: View {
 
     private var aboutPage: some View {
         VStack(spacing: 0) {
+            // Header
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(Color.claudeCoral)
+                    .frame(width: 6, height: 6)
+                Text("about")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.85))
+                Spacer()
+                Text("v\(UpdateChecker.shared.currentVersion)")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.28))
+            }
+            Rectangle().fill(Color.white.opacity(0.05)).frame(height: 1).padding(.vertical, 5)
+
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 14) {
 
@@ -1301,6 +1422,18 @@ struct NotchRootView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 7) {
                     sectionLabel("Claude Usage")
+                    if NSScreen.screens.count > 1 {
+                        settingRow("Display") {
+                            Picker("", selection: $settings.assignedDisplayID) {
+                                ForEach(NSScreen.screens, id: \.displayID) { s in
+                                    Text(s.localizedName).tag(s.displayID)
+                                }
+                            }
+                            .pickerStyle(.menu).labelsHidden()
+                            .tint(.white.opacity(0.5))
+                            .scaleEffect(0.9, anchor: .trailing)
+                        }
+                    }
                     settingRow("Size") {
                         SegmentPicker(options: ClaudeStatsSizePreset.allCases,
                                       selected: $settings.sizePreset) { sizeLabel($0) }
@@ -1399,20 +1532,23 @@ struct NotchRootView: View {
         // TimelineView auto-refreshes the view body every 10 s — no manual timer needed
         TimelineView(.periodic(from: .now, by: 10)) { _ in
             VStack(spacing: 4) {
-                HStack {
-                    Text("Analytics")
-                        .font(.system(size: 11, weight: .semibold))
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(Color.claudeTeal)
+                        .frame(width: 6, height: 6)
+                    Text("analytics")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundColor(.white.opacity(0.85))
                     Spacer()
                     HStack(spacing: 3) {
                         Circle().fill(Color.claudeTeal).frame(width: 4, height: 4)
                         Text("live")
-                            .font(.system(size: 8))
+                            .font(.system(size: 8, design: .monospaced))
                             .foregroundColor(.white.opacity(0.25))
                     }
                 }
 
-                thinDivider
+                Rectangle().fill(Color.white.opacity(0.05)).frame(height: 1)
 
                 if manager.isAuthenticated {
                     analyticsCard(
@@ -1617,9 +1753,12 @@ struct NotchRootView: View {
     private var focusPage: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
-                Text("Focus Timer")
-                    .font(.system(size: 12, weight: .semibold))
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(Color.claudeCoral)
+                    .frame(width: 6, height: 6)
+                Text("focus")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundColor(.white.opacity(0.85))
                 Spacer()
                 // Session dots (4 per long-break cycle)
@@ -1628,15 +1767,17 @@ struct NotchRootView: View {
                         Circle()
                             .fill(i < (timerManager.sessionCount % 4)
                                   ? Color.claudeCoral : Color.white.opacity(0.15))
-                            .frame(width: 6, height: 6)
+                            .frame(width: 5, height: 5)
                     }
                 }
-                Text("×\(timerManager.sessionCount / 4 > 0 ? "\(timerManager.sessionCount / 4)" : "")")
-                    .font(.system(size: 9))
-                    .foregroundColor(.white.opacity(timerManager.sessionCount >= 4 ? 0.5 : 0))
+                if timerManager.sessionCount >= 4 {
+                    Text("×\(timerManager.sessionCount / 4)")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.40))
+                }
             }
 
-            thinDivider.padding(.vertical, 8)
+            Rectangle().fill(Color.white.opacity(0.05)).frame(height: 1).padding(.vertical, 8)
 
             // Large countdown
             Text(timerManager.displayTime)
@@ -1778,83 +1919,10 @@ struct NotchRootView: View {
         p >= 85 ? .claudeAlert : p >= 70 ? .claudeAmber : .claudeTeal
     }
 
-    // MARK: Notes page (rich text)
+    // MARK: Notes page (drag-and-drop notes)
 
     private var notesPage: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text("Notes")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.85))
-                Spacer()
-            }
-
-            thinDivider.padding(.vertical, 6)
-
-            // Formatting toolbar
-            HStack(spacing: 3) {
-                notesFmtBtn("B", font: .system(size: 11, weight: .bold),
-                            active: editorState.isBold)       { editorState.toggleBold() }
-                notesFmtBtn("I", font: .system(size: 11, weight: .regular).italic(),
-                            active: editorState.isItalic)     { editorState.toggleItalic() }
-                notesFmtBtn("U", underline: true,
-                            active: editorState.isUnderline)  { editorState.toggleUnderline() }
-
-                Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 14).padding(.horizontal, 3)
-
-                notesFmtBtn("H1", font: .system(size: 9, weight: .bold),
-                            active: editorState.isHeading)    { editorState.setStyle(heading: true) }
-                notesFmtBtn("¶",  font: .system(size: 11),
-                            active: !editorState.isHeading)   { editorState.setStyle(heading: false) }
-
-                Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 14).padding(.horizontal, 3)
-
-                ForEach(0..<6, id: \.self) { i in
-                    Button(action: { editorState.setColor(index: i) }) {
-                        ZStack {
-                            Circle().fill(RichTextEditorState.paletteSwiftUI[i]).frame(width: 11, height: 11)
-                            if editorState.activeColor == i {
-                                Circle().stroke(Color.white.opacity(0.85), lineWidth: 1.5)
-                                    .frame(width: 14, height: 14)
-                            }
-                        }
-                    }.buttonStyle(.plain)
-                }
-                Spacer()
-            }
-            .padding(.bottom, 6)
-
-            // Editor — GeometryReader gives the NSViewRepresentable a concrete size
-            GeometryReader { geo in
-                RichTextView(state: editorState)
-                    .frame(width: geo.size.width, height: geo.size.height)
-            }
-        }
-    }
-
-    private func notesFmtBtn(
-        _ label: String,
-        font: Font = .system(size: 11, weight: .medium),
-        underline: Bool = false,
-        active: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Group {
-                if underline {
-                    Text(label).underline()
-                } else {
-                    Text(label)
-                }
-            }
-            .font(font)
-            .frame(width: 22, height: 20)
-            .foregroundColor(active
-                ? Color(red: 0.08, green: 0.08, blue: 0.10)
-                : .white.opacity(0.55))
-            .background(active ? Color.white.opacity(0.85) : Color.white.opacity(0.09))
-            .cornerRadius(4)
-        }.buttonStyle(.plain)
+        NotesTabView(store: noteStore)
     }
 
     // MARK: Shared helpers
@@ -1993,6 +2061,81 @@ struct PulsingChip<Content: View>: View {
             }
         } else {
             withAnimation(.easeInOut(duration: 0.2)) { dim = false }
+        }
+    }
+}
+
+// MARK: - Notch closed-state status pills
+
+/// Right-wing badge: pulsing teal dot + session count, shown while agents are running.
+private struct RunningSessionBadge: View {
+    let count: Int
+    let fontSize: CGFloat
+    @State private var pulse = false
+
+    var body: some View {
+        HStack(spacing: 3) {
+            // Pulsing halo + solid core in teal
+            ZStack {
+                Circle()
+                    .fill(Color.claudeTeal.opacity(pulse ? 0 : 0.35))
+                    .scaleEffect(pulse ? 2.2 : 1.0)
+                    .frame(width: 6, height: 6)
+                    .animation(
+                        .easeOut(duration: 1.1).repeatForever(autoreverses: false),
+                        value: pulse
+                    )
+                Circle().fill(Color.claudeTeal).frame(width: 5, height: 5)
+            }
+            .frame(width: 10, height: 10)
+
+            Text("\(count)")
+                .font(.system(size: fontSize, weight: .bold, design: .rounded))
+                .foregroundColor(.claudeTeal)
+        }
+        .onAppear { pulse = true }
+    }
+}
+
+/// Amber pulsing dot + minimal label in the closed notch when approval is waiting.
+private struct NotchApprovalPill: View {
+    @State private var pulse = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ZStack {
+                Circle()
+                    .fill(Color.claudeCoral.opacity(pulse ? 0 : 0.4))
+                    .scaleEffect(pulse ? 2.6 : 1.0)
+                    .frame(width: 6, height: 6)
+                    .animation(.easeOut(duration: 1.1).repeatForever(autoreverses: false), value: pulse)
+                Circle().fill(Color.claudeCoral).frame(width: 5, height: 5)
+            }
+            .frame(width: 10, height: 10)
+
+            Text("approve?")
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .foregroundColor(.claudeCoralLight.opacity(0.80))
+        }
+        .onAppear { pulse = true }
+    }
+}
+
+/// Symbol spinner + session count in the closed notch while Claude sessions are running.
+private struct NotchSessionPill: View {
+    @State private var symbolIndex = 0
+    private let symbols = ["·", "✢", "✳", "∗", "✻", "✽"]
+    private let timer = Timer.publish(every: 0.15, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(symbols[symbolIndex])
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(.claudeCoral.opacity(0.85))
+                .animation(.none, value: symbolIndex)
+        }
+        .onReceive(timer) { _ in
+            symbolIndex = (symbolIndex + 1) % symbols.count
         }
     }
 }
@@ -2372,4 +2515,78 @@ private enum ClaudeTips {
         ("🤖 Sonnet 80 % — Task Matching",
          "Running low on Sonnet! Match model to task: Sonnet for complex reasoning & code, Haiku for summaries, Q&A, and formatting tasks."),
     ]
+}
+
+// MARK: - AppKit drag destination for Notes
+// This overlay sits above the NSHostingView. hitTest returns nil so normal mouse events
+// fall through to SwiftUI; NSDraggingDestination is independent of hit-testing and still fires.
+
+final class NoteDropOverlayView: NSView {
+    var noteStore:   NoteStore?
+    var expandNotch: (() -> Void)?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        registerForDraggedTypes([
+            .URL,
+            .string,
+            NSPasteboard.PasteboardType("public.url"),
+            NSPasteboard.PasteboardType("public.plain-text"),
+            NSPasteboard.PasteboardType("public.file-url"),
+        ])
+        wantsLayer = true
+        layer?.backgroundColor = .clear
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    // Pass regular mouse events to the hosting view below.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    // MARK: NSDraggingDestination (overrides from NSView)
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        DispatchQueue.main.async { self.expandNotch?() }
+        return .copy
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { .copy }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let store = noteStore else { return false }
+        let pb  = sender.draggingPasteboard
+        let src = NSWorkspace.shared.frontmostApplication?.localizedName
+
+        // 1. NSURL objects (dragged links from browsers)
+        if let urls = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
+           let url = urls.first(where: { $0.scheme == "http" || $0.scheme == "https" }) {
+            DispatchQueue.main.async { store.captureLink(url, from: src) }
+            return true
+        }
+
+        // 2. URL string types
+        for type in [NSPasteboard.PasteboardType("public.url"), NSPasteboard.PasteboardType.URL] {
+            if let s = pb.string(forType: type),
+               let url = URL(string: s),
+               url.scheme == "http" || url.scheme == "https" {
+                DispatchQueue.main.async { store.captureLink(url, from: src) }
+                return true
+            }
+        }
+
+        // 3. Plain text (selected text from any app)
+        for type in [NSPasteboard.PasteboardType.string,
+                     NSPasteboard.PasteboardType("public.plain-text")] {
+            guard let text = pb.string(forType: type) else { continue }
+            let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { continue }
+            if let url = URL(string: t), url.scheme == "http" || url.scheme == "https" {
+                DispatchQueue.main.async { store.captureLink(url, from: src) }
+            } else {
+                DispatchQueue.main.async { store.captureText(t, from: src) }
+            }
+            return true
+        }
+
+        return false
+    }
 }
