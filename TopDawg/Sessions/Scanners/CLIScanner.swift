@@ -85,9 +85,15 @@ struct CLIScanner {
             // input prompt to the user. If that's the last entry, the session is idle.
             // Any other last type (assistant, tool_use, tool_result, user…) means
             // Claude is mid-execution. No transcript at all → not yet processing.
+            // Idle turn boundary: Claude writes last-prompt then permission-mode before
+            // handing control back. Either of these as the final entry means Claude
+            // is at the prompt waiting for input. Anything else (assistant, user,
+            // attachment…) means Claude is mid-execution.
+            let idleTypes: Set<String> = ["last-prompt", "permission-mode"]
             let isActivelyProcessing: Bool = {
                 guard alive, let tURL = transcriptURL else { return false }
-                return lastTranscriptEntryType(at: tURL) != "last-prompt"
+                guard let lastType = lastTranscriptEntryType(at: tURL) else { return false }
+                return !idleTypes.contains(lastType)
             }()
 
             out.append(UnifiedSession(
