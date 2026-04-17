@@ -68,7 +68,7 @@ struct CoworkScanner {
                 sessionId: file.sessionId,
                 lastActivity: lastActivity,
                 isRunning: isRunning,
-                transcriptMtime: nil,
+                isActivelyProcessing: false,
                 sourcePath: url.path
             ))
         }

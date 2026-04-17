@@ -35,10 +35,11 @@ struct UnifiedSession: Identifiable, Hashable {
     let lastActivity: Date
     let isRunning: Bool             // whether the owning process is alive
 
-    /// mtime of the session's JSONL transcript. Written continuously while Claude
-    /// executes tools; goes stale the moment Claude finishes and waits for input.
-    /// nil for surfaces that don't have a known transcript path (Desktop, Cowork).
-    let transcriptMtime: Date?
+    /// True only when Claude is mid-execution (last JSONL entry is NOT "last-prompt").
+    /// Claude Code writes "last-prompt" the instant it returns control to the user,
+    /// so this flips to false the moment Claude becomes idle at the input prompt.
+    /// Always false for Desktop and Cowork (no accessible transcript).
+    let isActivelyProcessing: Bool
 
     /// Backing JSON file path on disk, for "Reveal in Finder" later.
     let sourcePath: String?

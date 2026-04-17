@@ -30,7 +30,7 @@ struct DesktopScanner {
                 sessionId: String(pid),
                 lastActivity: launchDate,
                 isRunning: true,
-                transcriptMtime: nil,
+                isActivelyProcessing: false,
                 sourcePath: nil
             )
         ]

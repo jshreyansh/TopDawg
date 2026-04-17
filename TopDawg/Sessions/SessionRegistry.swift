@@ -59,15 +59,10 @@ final class SessionRegistry: ObservableObject {
     var runningCount: Int { sessions.filter { $0.isRunning }.count }
 
     /// Sessions where Claude is actively executing — not sitting idle waiting for user input.
-    /// For CLI sessions we use transcript JSONL mtime: Claude writes continuously while
-    /// running tools and stops the moment it prints its response and awaits input.
-    /// A 15-second window absorbs the 5-second poll lag with room to spare.
-    /// Non-CLI sessions (Desktop, Cowork) have no transcript path so they are excluded.
+    /// Driven by isActivelyProcessing, which reads the last JSONL entry type; Claude Code
+    /// writes "last-prompt" the instant it hands control back to the user.
     var activelyProcessingCount: Int {
-        sessions.filter { s in
-            guard s.isRunning, let tm = s.transcriptMtime else { return false }
-            return Date().timeIntervalSince(tm) < 15
-        }.count
+        sessions.filter { $0.isRunning && $0.isActivelyProcessing }.count
     }
 
     func sessions(of kind: SessionKind) -> [UnifiedSession] {
