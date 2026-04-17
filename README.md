@@ -2,8 +2,6 @@
 
 A macOS notch-based command center for Claude. See every running Claude session (Claude Code CLI, Cowork, Desktop app) in one place, jump to any of them with a click, and keep tabs on your Claude.ai usage without leaving your current window.
 
-Forked and reshaped from [acenaut/claude-notch](https://github.com/acenaut/claude-notch) (which was itself a fork of [carlomatthaei/claude-notch](https://github.com/carlomatthaei/claude-notch) — credit for the original notch-window plumbing, usage-API client, and Pomodoro timer goes to them).
-
 ## What's new vs. upstream
 
 - **Sessions panel** (primary): live list of every Claude session running on this Mac, grouped by surface (Code / Desktop / Cowork), click-to-focus the owning terminal or app
